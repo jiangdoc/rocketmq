@@ -159,6 +159,12 @@ public class MQClientInstance {
             MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION), RemotingCommand.getSerializeTypeConfigInThisServer());
     }
 
+    /**
+     * TopicRouteData 转换成 TopicPublishInfo
+     * @param topic
+     * @param route
+     * @return
+     */
     public static TopicPublishInfo topicRouteData2TopicPublishInfo(final String topic, final TopicRouteData route) {
         TopicPublishInfo info = new TopicPublishInfo();
         info.setTopicRouteData(route);
@@ -233,15 +239,21 @@ public class MQClientInstance {
                     if (null == this.clientConfig.getNamesrvAddr()) {
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
-                    // Start request-response channel
+                    // 初始化网络客户端
                     this.mQClientAPIImpl.start();
-                    // Start various schedule tasks
+                    /**
+                     * 启动定时任务，包含
+                     * 1、定时拉取路由信息
+                     * 2、与 broker 的心跳检测
+                     * 3、定时持久化 offset
+                     */
                     this.startScheduledTask();
-                    // Start pull service
+                    // 开启消息拉取任务的执行线程
                     this.pullMessageService.start();
-                    // Start rebalance service
+                    // 开启消费端负载均衡任务的执行线程
                     this.rebalanceService.start();
-                    // Start push service
+                    // 初始化一个自用的producer，`CLIENT_INNER_PRODUCER`
+                    // 主要用于在消费失败或者超时后发送重试的消息给broker
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
                     log.info("the client factory [{}] start OK", this.clientId);
                     this.serviceState = ServiceState.RUNNING;
@@ -255,6 +267,7 @@ public class MQClientInstance {
     }
 
     private void startScheduledTask() {
+        // 每隔两分钟拉取一次 nameserver 地址
         if (null == this.clientConfig.getNamesrvAddr()) {
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
@@ -269,6 +282,7 @@ public class MQClientInstance {
             }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
         }
 
+        // 每隔 30s，拉取一次路由信息
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -281,6 +295,7 @@ public class MQClientInstance {
             }
         }, 10, this.clientConfig.getPollNameServerInterval(), TimeUnit.MILLISECONDS);
 
+        // 跟 broker 的心跳检测
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -294,6 +309,7 @@ public class MQClientInstance {
             }
         }, 1000, this.clientConfig.getHeartbeatBrokerInterval(), TimeUnit.MILLISECONDS);
 
+        // 默认每隔5秒，持久化 offset
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -975,6 +991,7 @@ public class MQClientInstance {
     }
 
     public void doRebalance() {
+
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
@@ -1075,6 +1092,7 @@ public class MQClientInstance {
     }
 
     public List<String> findConsumerIdList(final String topic, final String group) {
+        // 随机挑选一个 broker
         String brokerAddr = this.findBrokerAddrByTopic(topic);
         if (null == brokerAddr) {
             this.updateTopicRouteInfoFromNameServer(topic);
@@ -1083,6 +1101,7 @@ public class MQClientInstance {
 
         if (null != brokerAddr) {
             try {
+                //从broker端获取消费该消费组的所有客户端clientId
                 return this.mQClientAPIImpl.getConsumerIdListByGroup(brokerAddr, group, 3000);
             } catch (Exception e) {
                 log.warn("getConsumerIdListByGroup exception, " + brokerAddr + " " + group, e);

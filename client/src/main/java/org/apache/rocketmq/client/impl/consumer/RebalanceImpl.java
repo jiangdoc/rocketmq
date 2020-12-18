@@ -214,11 +214,13 @@ public abstract class RebalanceImpl {
     }
 
     public void doRebalance(final boolean isOrder) {
+        // 获取订阅信息
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
             for (final Map.Entry<String, SubscriptionData> entry : subTable.entrySet()) {
                 final String topic = entry.getKey();
                 try {
+                    // 负载均衡
                     this.rebalanceByTopic(topic, isOrder);
                 } catch (Throwable e) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
@@ -238,6 +240,7 @@ public abstract class RebalanceImpl {
     private void rebalanceByTopic(final String topic, final boolean isOrder) {
         switch (messageModel) {
             case BROADCASTING: {
+                // 广播模式
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
                 if (mqSet != null) {
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, mqSet, isOrder);
@@ -255,7 +258,15 @@ public abstract class RebalanceImpl {
                 break;
             }
             case CLUSTERING: {
+                // 集群模式
+
+                // 获取 topic 对应的所有的队列信息
+                /**
+                 * 注册是通过与 broker 的心跳定时任务做的
+                 * org.apache.rocketmq.client.impl.factory.MQClientInstance#sendHeartbeatToAllBrokerWithLock()
+                 */
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
+                // 从broker端获取消费该消费组的所有客户端clientId (cId)
                 List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
                 if (null == mqSet) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
@@ -274,10 +285,12 @@ public abstract class RebalanceImpl {
                     Collections.sort(mqAll);
                     Collections.sort(cidAll);
 
+                    // 分享问题2.2 默认使用 AllocateMessageQueueAveragely 策略，即平均分配策略
                     AllocateMessageQueueStrategy strategy = this.allocateMessageQueueStrategy;
 
                     List<MessageQueue> allocateResult = null;
                     try {
+                        // 获取该 client 分配到的队列 list
                         allocateResult = strategy.allocate(
                             this.consumerGroup,
                             this.mQClientFactory.getClientId(),
@@ -294,6 +307,7 @@ public abstract class RebalanceImpl {
                         allocateResultSet.addAll(allocateResult);
                     }
 
+                    // PullRequest 放到队列中
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, allocateResultSet, isOrder);
                     if (changed) {
                         log.info(
@@ -336,6 +350,7 @@ public abstract class RebalanceImpl {
             ProcessQueue pq = next.getValue();
 
             if (mq.getTopic().equals(topic)) {
+                // 如果mqSet 中不包含该 mq，则说明进行了 reBanlance，需要从内存中移除这个队列
                 if (!mqSet.contains(mq)) {
                     pq.setDropped(true);
                     if (this.removeUnnecessaryMessageQueue(mq, pq)) {
@@ -344,6 +359,7 @@ public abstract class RebalanceImpl {
                         log.info("doRebalance, {}, remove unnecessary mq, {}", consumerGroup, mq);
                     }
                 } else if (pq.isPullExpired()) {
+                    // 过期失效，直接移除这个队列
                     switch (this.consumeType()) {
                         case CONSUME_ACTIVELY:
                             break;
@@ -363,6 +379,7 @@ public abstract class RebalanceImpl {
             }
         }
 
+        // processQueueTable 放入存在于 mqSet 不存在与 processQueueTable 中的messageQueue
         List<PullRequest> pullRequestList = new ArrayList<PullRequest>();
         for (MessageQueue mq : mqSet) {
             if (!this.processQueueTable.containsKey(mq)) {
@@ -394,6 +411,7 @@ public abstract class RebalanceImpl {
             }
         }
 
+        // 将 pullRequest 放入队列
         this.dispatchPullRequest(pullRequestList);
 
         return changed;

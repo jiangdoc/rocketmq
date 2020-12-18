@@ -28,9 +28,13 @@ import java.util.Set;
 
 public class SubscriptionData implements Comparable<SubscriptionData> {
     public final static String SUB_ALL = "*";
+    // 消息过滤模式，如果为 true, 表示使用上传过滤类来进行消息过滤，默认为使用tag来进行消息过滤。暂不了解
     private boolean classFilterMode = false;
+    // topic
     private String topic;
+    // tag1 || tag2
     private String subString;
+    // tag
     private Set<String> tagsSet = new HashSet<String>();
     private Set<Integer> codeSet = new HashSet<Integer>();
     private long subVersion = System.currentTimeMillis();

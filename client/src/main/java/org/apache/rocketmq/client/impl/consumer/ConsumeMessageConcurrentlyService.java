@@ -203,8 +203,10 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         final ProcessQueue processQueue,
         final MessageQueue messageQueue,
         final boolean dispatchToConsume) {
+        // 获取最大的批量消费的size，默认是 1。场景：每次处理 1条消息，需要 1 秒，处理 10 条，需要 10秒，但是10条消息一起处理，只需要5秒。一个典型的场景就是批量 insert 场景
         final int consumeBatchSize = this.defaultMQPushConsumer.getConsumeMessageBatchMaxSize();
         if (msgs.size() <= consumeBatchSize) {
+            // 拉取到的消息数量 < consumeBatchSize，则全部丢到线程池中执行
             ConsumeRequest consumeRequest = new ConsumeRequest(msgs, processQueue, messageQueue);
             try {
                 this.consumeExecutor.submit(consumeRequest);
@@ -278,15 +280,21 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 
         switch (this.defaultMQPushConsumer.getMessageModel()) {
             case BROADCASTING:
+                // 广播消费模式
                 for (int i = ackIndex + 1; i < consumeRequest.getMsgs().size(); i++) {
                     MessageExt msg = consumeRequest.getMsgs().get(i);
                     log.warn("BROADCASTING, the message consume failed, drop it, {}", msg.toString());
                 }
                 break;
             case CLUSTERING:
+                /**
+                 * 集群消费模式,如果消息消费失败，则 ackIndex = -1，此时会重新投递延时消息，后续重新消费；
+                 * 如果超过最大的重投递次数(默认16),消息投递到 broker 之后，会直接进入死信队列，细节在 SendMessageProcessor.asyncConsumerSendMsgBack
+                 */
                 List<MessageExt> msgBackFailed = new ArrayList<MessageExt>(consumeRequest.getMsgs().size());
                 for (int i = ackIndex + 1; i < consumeRequest.getMsgs().size(); i++) {
                     MessageExt msg = consumeRequest.getMsgs().get(i);
+                    // 重新投递
                     boolean result = this.sendMessageBack(msg, context);
                     if (!result) {
                         msg.setReconsumeTimes(msg.getReconsumeTimes() + 1);
@@ -304,8 +312,11 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 break;
         }
 
+        // 已经消费过的消息从 msgTreeMap 移除，并返回最小的 offset
         long offset = consumeRequest.getProcessQueue().removeMessage(consumeRequest.getMsgs());
+        // 不管消费成功或者失败，都要更新 offset
         if (offset >= 0 && !consumeRequest.getProcessQueue().isDropped()) {
+            // 更新 offset
             this.defaultMQPushConsumerImpl.getOffsetStore().updateOffset(consumeRequest.getMessageQueue(), offset, true);
         }
     }
@@ -375,6 +386,11 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             return processQueue;
         }
 
+        /**
+         * 真正的消息处理
+         * 1、调用钩子
+         * 2、调用 listener.consumeMessage
+         */
         @Override
         public void run() {
             if (this.processQueue.isDropped()) {
@@ -388,6 +404,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             defaultMQPushConsumerImpl.resetRetryAndNamespace(msgs, defaultMQPushConsumer.getConsumerGroup());
 
             ConsumeMessageContext consumeMessageContext = null;
+            // 执行 hook
             if (ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.hasHook()) {
                 consumeMessageContext = new ConsumeMessageContext();
                 consumeMessageContext.setNamespace(defaultMQPushConsumer.getNamespace());
@@ -408,6 +425,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                         MessageAccessor.setConsumeStartTimeStamp(msg, String.valueOf(System.currentTimeMillis()));
                     }
                 }
+                // 调用 listener 进行业务逻辑
                 status = listener.consumeMessage(Collections.unmodifiableList(msgs), context);
             } catch (Throwable e) {
                 log.warn("consumeMessage exception: {} Group: {} Msgs: {} MQ: {}",
@@ -454,6 +472,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 .incConsumeRT(ConsumeMessageConcurrentlyService.this.consumerGroup, messageQueue.getTopic(), consumeRT);
 
             if (!processQueue.isDropped()) {
+                // 分享问题2.3 重试逻辑 & 消费进度更新
                 ConsumeMessageConcurrentlyService.this.processConsumeResult(status, context, this);
             } else {
                 log.warn("processQueue is dropped without process consume result. messageQueue={}, msgs={}", messageQueue, msgs);

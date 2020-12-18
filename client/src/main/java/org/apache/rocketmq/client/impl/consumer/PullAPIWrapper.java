@@ -71,7 +71,9 @@ public class PullAPIWrapper {
         final SubscriptionData subscriptionData) {
         PullResultExt pullResultExt = (PullResultExt) pullResult;
 
+        // 根据Broker的返回建议，更新下次建议拉取的Broker（更新消息队列拉取消息Broker编号的映射）
         this.updatePullFromWhichNode(mq, pullResultExt.getSuggestWhichBrokerId());
+
         if (PullStatus.FOUND == pullResult.getPullStatus()) {
             ByteBuffer byteBuffer = ByteBuffer.wrap(pullResultExt.getMessageBinary());
             List<MessageExt> msgList = MessageDecoder.decodes(byteBuffer);
@@ -81,6 +83,7 @@ public class PullAPIWrapper {
                 msgListFilterAgain = new ArrayList<MessageExt>(msgList.size());
                 for (MessageExt msg : msgList) {
                     if (msg.getTags() != null) {
+                        // 这里通过 tag 进行过滤，由于 broker 是针对 tag 的 hash 做的过滤，所以客户端也得过滤一遍
                         if (subscriptionData.getTagsSet().contains(msg.getTags())) {
                             msgListFilterAgain.add(msg);
                         }
@@ -100,8 +103,10 @@ public class PullAPIWrapper {
                 if (Boolean.parseBoolean(traFlag)) {
                     msg.setTransactionId(msg.getProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX));
                 }
+                // 设置当前队列的最小的 offset
                 MessageAccessor.putProperty(msg, MessageConst.PROPERTY_MIN_OFFSET,
                     Long.toString(pullResult.getMinOffset()));
+                // 设置当前队列最大的 offset
                 MessageAccessor.putProperty(msg, MessageConst.PROPERTY_MAX_OFFSET,
                     Long.toString(pullResult.getMaxOffset()));
                 msg.setBrokerName(mq.getBrokerName());

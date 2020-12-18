@@ -26,8 +26,15 @@ import org.apache.rocketmq.common.protocol.route.TopicRouteData;
 public class TopicPublishInfo {
     private boolean orderTopic = false;
     private boolean haveTopicRouterInfo = false;
+    /**
+     * topic 的所有队列信息，由 TopicRouteData#queueDatas 转换而来
+     */
     private List<MessageQueue> messageQueueList = new ArrayList<MessageQueue>();
     private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();
+
+    /**
+     * broker 信息和队列信息
+     */
     private TopicRouteData topicRouteData;
 
     public boolean isOrderTopic() {
@@ -68,8 +75,10 @@ public class TopicPublishInfo {
 
     public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
         if (lastBrokerName == null) {
+            // 第一次进来，没有重试过，会走这里，进行循环分配
             return selectOneMessageQueue();
         } else {
+            // 如果有失败的情况，需要过滤掉失败的broker 的队列
             int index = this.sendWhichQueue.getAndIncrement();
             for (int i = 0; i < this.messageQueueList.size(); i++) {
                 int pos = Math.abs(index++) % this.messageQueueList.size();
@@ -80,10 +89,15 @@ public class TopicPublishInfo {
                     return mq;
                 }
             }
+            // 这里应该是个兜底策略，如果只有一个 broker，那只能投递到这个 broker 上的队列里了
             return selectOneMessageQueue();
         }
     }
 
+    /**
+     * 循环分配
+     * @return
+     */
     public MessageQueue selectOneMessageQueue() {
         int index = this.sendWhichQueue.getAndIncrement();
         int pos = Math.abs(index) % this.messageQueueList.size();

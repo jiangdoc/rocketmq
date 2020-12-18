@@ -56,23 +56,37 @@ public class MQFaultStrategy {
     }
 
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
+        // 默认不会走故障延迟策略。个人认为这个策略是为了避免这种场景：
+        // todo 为什么要有故障延迟策略
         if (this.sendLatencyFaultEnable) {
+            // 故障延迟策略
+            /**
+             * 通过RocketMQ的预测机制来预测一个Broker是否可用
+             * 如果上次失败的Broker可用那么还是会选择该Broker的队列
+             * 如果上述情况失败，则随机选择一个进行发送
+             */
             try {
+                // 获取模除的除数
                 int index = tpInfo.getSendWhichQueue().getAndIncrement();
                 for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {
                     int pos = Math.abs(index++) % tpInfo.getMessageQueueList().size();
                     if (pos < 0)
                         pos = 0;
+                    // 选择取模结果作为索引值，选择队列
                     MessageQueue mq = tpInfo.getMessageQueueList().get(pos);
                     if (latencyFaultTolerance.isAvailable(mq.getBrokerName())) {
+                        // 如果选择的队列所在的 broker 可用，且是上次投递失败的那个 broker，则直接选择这个队列
                         if (null == lastBrokerName || mq.getBrokerName().equals(lastBrokerName))
                             return mq;
                     }
                 }
 
+                // 按照可用程度排序，在前 50% 中的broker 中随机选择一个
                 final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
+                // 获取选中的 broker 上可投递的队列数量
                 int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);
                 if (writeQueueNums > 0) {
+                    // 在该 broker 上选择一个队列
                     final MessageQueue mq = tpInfo.selectOneMessageQueue();
                     if (notBestBroker != null) {
                         mq.setBrokerName(notBestBroker);
@@ -85,10 +99,10 @@ public class MQFaultStrategy {
             } catch (Exception e) {
                 log.error("Error occurred when selecting message queue", e);
             }
-
+            // 如果故障延迟策略失败，则直接走非故障延迟策略
             return tpInfo.selectOneMessageQueue();
         }
-
+        // 非容错策略
         return tpInfo.selectOneMessageQueue(lastBrokerName);
     }
 

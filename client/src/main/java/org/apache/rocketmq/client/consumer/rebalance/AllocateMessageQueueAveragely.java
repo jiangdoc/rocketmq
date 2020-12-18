@@ -50,9 +50,17 @@ public class AllocateMessageQueueAveragely implements AllocateMessageQueueStrate
                 cidAll);
             return result;
         }
-
+        // 当前 clientId 的下标
         int index = cidAll.indexOf(currentCID);
+        // 取余，例如 20个 queue，3个 client，结果是 2
         int mod = mqAll.size() % cidAll.size();
+        /**
+         * 计算一个client，分配几个 queue
+         * mqAll数量小于等于消费端client数量的话，一个client对应一个messgeQueue
+         * 大于的话一个client可以对应多个messageQueue
+         * 由于MessageQueue跟cidAll是顺序固定的，可以保证一个client对应的messageQueue固定，从而避免重复消费等竞争性问题
+         * 如果发生broker或client变更会按照这个策略重新分配messageQueue(rebalance过程中有可能发生重复消费问题)
+         */
         int averageSize =
             mqAll.size() <= cidAll.size() ? 1 : (mod > 0 && index < mod ? mqAll.size() / cidAll.size()
                 + 1 : mqAll.size() / cidAll.size());

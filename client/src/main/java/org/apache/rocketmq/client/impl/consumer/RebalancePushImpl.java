@@ -214,6 +214,7 @@ public class RebalancePushImpl extends RebalanceImpl {
     @Override
     public void dispatchPullRequest(List<PullRequest> pullRequestList) {
         for (PullRequest pullRequest : pullRequestList) {
+            // push 消费模式下，拉取到消息，直接把 PullRequest 放入内存中的队列，由定时任务消费向broker拉取消息
             this.defaultMQPushConsumerImpl.executePullRequestImmediately(pullRequest);
             log.info("doRebalance, {}, add a new pull request {}", consumerGroup, pullRequest);
         }

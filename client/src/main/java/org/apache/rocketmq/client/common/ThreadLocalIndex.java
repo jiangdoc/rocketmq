@@ -23,6 +23,10 @@ public class ThreadLocalIndex {
     private final ThreadLocal<Integer> threadLocalIndex = new ThreadLocal<Integer>();
     private final Random random = new Random();
 
+    /**
+     * 初始值是一个随机值，后续直接在这个随机值上 + 1
+     * @return
+     */
     public int getAndIncrement() {
         Integer index = this.threadLocalIndex.get();
         if (null == index) {
