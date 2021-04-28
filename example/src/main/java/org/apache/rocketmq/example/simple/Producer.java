@@ -25,6 +25,7 @@ import org.apache.rocketmq.remoting.common.RemotingHelper;
 public class Producer {
     public static void main(String[] args) throws MQClientException, InterruptedException {
 
+        // 这里会生成一个线程池
         DefaultMQProducer producer = new DefaultMQProducer("ProducerGroupName");
         producer.start();
 
@@ -35,6 +36,8 @@ public class Producer {
                         "TagA",
                         "OrderID188",
                         "Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET));
+                    // 设置延迟消息的级别
+                    //msg.setDelayTimeLevel(4);
                     SendResult sendResult = producer.send(msg);
                     System.out.printf("%s%n", sendResult);
                 }

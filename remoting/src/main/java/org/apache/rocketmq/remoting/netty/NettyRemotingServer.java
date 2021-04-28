@@ -193,6 +193,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 }
             });
 
+        /**这里面会new NettyServerHandler()
+         * NettyServerHandler主要用来接收并处理消息
+         */
         prepareSharableHandlers();
 
         ServerBootstrap childHandler =
@@ -346,6 +349,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         handshakeHandler = new HandshakeHandler(TlsSystemConfig.tlsMode);
         encoder = new NettyEncoder();
         connectionManageHandler = new NettyConnectManageHandler();
+        // 接受消息
         serverHandler = new NettyServerHandler();
     }
 
@@ -417,6 +421,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
+            // 处理收到的消息
             processMessageReceived(ctx, msg);
         }
     }

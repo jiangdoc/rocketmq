@@ -17,10 +17,22 @@
 
 package org.apache.rocketmq.remoting;
 
+import org.apache.rocketmq.remoting.netty.NettyRemotingServer;
+
 public interface RemotingService {
+
+    //nettyconfig配置启动NIO监听端口服务（ServerBootstrap）serverBootstrap.bind().sync()
+
+    /**
+     * 启动NettyRemotingServer：这里面会接受并处理消息
+     * @see NettyRemotingServer#start()
+     *
+     */
     void start();
 
+    //关闭服务端口
     void shutdown();
 
+    //注册rpc响应钩子
     void registerRPCHook(RPCHook rpcHook);
 }

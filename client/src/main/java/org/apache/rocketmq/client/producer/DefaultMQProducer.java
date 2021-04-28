@@ -95,6 +95,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Maximum number of retry to perform internally before claiming sending failure in synchronous mode. </p>
      *
      * This may potentially cause message duplication which is up to application developers to resolve.
+     * 发送失败时重试次数
      */
     private int retryTimesWhenSendFailed = 2;
 
@@ -202,6 +203,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     public DefaultMQProducer(final String namespace, final String producerGroup, RPCHook rpcHook) {
         this.namespace = namespace;
         this.producerGroup = producerGroup;
+        // 这里会new一个ThreadPoolExecutor的线程池，异步发送消息
         defaultMQProducerImpl = new DefaultMQProducerImpl(this, rpcHook);
     }
 

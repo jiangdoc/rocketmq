@@ -329,6 +329,7 @@ public class BrokerController {
                 Executors.newFixedThreadPool(this.brokerConfig.getConsumerManageThreadPoolNums(), new ThreadFactoryImpl(
                     "ConsumerManageThread_"));
 
+            // 重要，这里会消息的处理器
             this.registerProcessor();
 
             final long initialDelay = UtilAll.computeNextMorningTimeMillis() - System.currentTimeMillis();
@@ -848,11 +849,23 @@ public class BrokerController {
         return this.brokerConfig.getBrokerIP1() + ":" + this.nettyServerConfig.getListenPort();
     }
 
+    /**
+     * 这里会启动很多的服务
+     * @throws Exception
+     */
     public void start() throws Exception {
+        /**
+         * messageStore是保存消息的接口,默认是org.apache.rocketmq.store.DefaultMessageStore实现。
+         *
+         */
         if (this.messageStore != null) {
             this.messageStore.start();
         }
 
+        /**
+         * 重要
+         * RemotingServer是用来接收网络请求并进行处理的核心类.
+         */
         if (this.remotingServer != null) {
             this.remotingServer.start();
         }
@@ -861,6 +874,7 @@ public class BrokerController {
             this.fastRemotingServer.start();
         }
 
+        //fileWatchService是一个线程类,里面会定时做一些监控工作。
         if (this.fileWatchService != null) {
             this.fileWatchService.start();
         }

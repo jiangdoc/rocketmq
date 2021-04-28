@@ -87,6 +87,15 @@ public class BrokerStartup {
         }
     }
 
+    /**
+     * 这里会创建一个BrokerController：为BrokerController设置一些必要的参数
+     * - final BrokerConfig brokerConfig = new BrokerConfig();
+     * - final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+     * - final NettyClientConfig nettyClientConfig = new NettyClientConfig();
+     *
+     * @param args
+     * @return
+     */
     public static BrokerController createBrokerController(String[] args) {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
 
@@ -211,14 +220,12 @@ public class BrokerStartup {
             MixAll.printObjectProperties(log, nettyClientConfig);
             MixAll.printObjectProperties(log, messageStoreConfig);
 
-            final BrokerController controller = new BrokerController(
-                brokerConfig,
-                nettyServerConfig,
-                nettyClientConfig,
-                messageStoreConfig);
+            // 创建 BrokerController
+            final BrokerController controller = new BrokerController(brokerConfig, nettyServerConfig, nettyClientConfig, messageStoreConfig);
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
 
+            // 这里会注册一些请求处理器
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
