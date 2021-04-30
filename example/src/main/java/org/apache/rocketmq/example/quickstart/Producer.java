@@ -49,6 +49,7 @@ public class Producer {
          * Launch the instance.
          */
         producer.setNamesrvAddr("127.0.0.1:9876");
+        // 这里会向nameSrv注册，并保持心跳检测
         producer.start();
 
         for (int i = 0; i < 1000; i++) {

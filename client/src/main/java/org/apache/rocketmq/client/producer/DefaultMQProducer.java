@@ -264,12 +264,13 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      *
      * <strong> Much internal initializing procedures are carried out to make this instance prepared, thus, it's a must
      * to invoke this method before sending or querying messages. </strong> </p>
-     *
+     *  这里会向nameSrv注册，并保持心跳检测
      * @throws MQClientException if there is any unexpected error.
      */
     @Override
     public void start() throws MQClientException {
         this.setProducerGroup(withNamespace(this.producerGroup));
+        // 启动MQ消费之客户端实例
         this.defaultMQProducerImpl.start();
         if (null != traceDispatcher) {
             try {
