@@ -93,6 +93,13 @@ public class BrokerStartup {
      * - final NettyServerConfig nettyServerConfig = new NettyServerConfig();
      * - final NettyClientConfig nettyClientConfig = new NettyClientConfig();
      *
+     * 初始化BrokerController
+     * controller.initialize();
+     *      - 很多线程池
+     *      - 这里会注册一些请求处理器
+     *               @see org.apache.rocketmq.remoting.netty.NettyRemotingAbstract#processorTable
+     *      - 很多定时任务
+     *
      * @param args
      * @return
      */
@@ -225,7 +232,13 @@ public class BrokerStartup {
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
 
-            // 这里会注册一些请求处理器
+            /**
+             * 初始化：BrokerController
+             * 1. 创建了很多的线程池
+             * 2. 注册一些请求处理器：
+             *          @see org.apache.rocketmq.remoting.netty.NettyRemotingAbstract#processorTable
+             * 3. 创建很多定时任务
+             */
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();

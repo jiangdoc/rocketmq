@@ -58,6 +58,7 @@ public interface MessageStore {
     /** Store a message into store in async manner, the processor can process the next request
      *  rather than wait for result
      *  when result is completed, notify the client in async manner
+     * 异步存储消息到磁盘中，处理器可以处理下一个请求而不是等待结果
      *
      * @param msg MessageInstance to store
      * @return a CompletableFuture for the result of store operation

@@ -87,6 +87,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     private HandshakeHandler handshakeHandler;
     private NettyEncoder encoder;
     private NettyConnectManageHandler connectionManageHandler;
+    /**
+     * 接收消息并处理
+     */
     private NettyServerHandler serverHandler;
 
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig) {
@@ -181,23 +184,25 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     @Override
     public void start() {
-        this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
-            nettyServerConfig.getServerWorkerThreads(),
+        // 注册一个事件处理者组
+        this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(nettyServerConfig.getServerWorkerThreads(),
             new ThreadFactory() {
-
                 private AtomicInteger threadIndex = new AtomicInteger(0);
-
                 @Override
                 public Thread newThread(Runnable r) {
                     return new Thread(r, "NettyServerCodecThread_" + this.threadIndex.incrementAndGet());
                 }
             });
 
-        /**这里面会new NettyServerHandler()
+        /**
+         * 这里面会new NettyServerHandler()
          * NettyServerHandler主要用来接收并处理消息
          */
         prepareSharableHandlers();
 
+        /**
+         * 启动一个Netty的服务用来接收消息
+         */
         ServerBootstrap childHandler =
             this.serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector)
                 .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
@@ -211,15 +216,11 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel ch) throws Exception {
+                        //Handler用来处理Server端接收和处理消息的逻辑
                         ch.pipeline()
                             .addLast(defaultEventExecutorGroup, HANDSHAKE_HANDLER_NAME, handshakeHandler)
-                            .addLast(defaultEventExecutorGroup,
-                                encoder,
-                                new NettyDecoder(),
-                                new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()),
-                                connectionManageHandler,
-                                serverHandler
-                            );
+                                //serverHandler = new NettyServerHandler();接收处理消息
+                            .addLast(defaultEventExecutorGroup, encoder, new NettyDecoder(), new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()), connectionManageHandler, serverHandler);
                     }
                 });
 

@@ -138,6 +138,12 @@ public class AsyncTraceDispatcher implements TraceDispatcher {
         this.hostConsumer = hostConsumer;
     }
 
+    /**
+     * 初始化异步传输数据模块
+     * @param nameSrvAddr
+     * @param accessChannel
+     * @throws MQClientException
+     */
     public void start(String nameSrvAddr, AccessChannel accessChannel) throws MQClientException {
         if (isStarted.compareAndSet(false, true)) {
             traceProducer.setNamesrvAddr(nameSrvAddr);
@@ -145,6 +151,7 @@ public class AsyncTraceDispatcher implements TraceDispatcher {
             traceProducer.start();
         }
         this.accessChannel = accessChannel;
+        // 这里会刷新topic信息
         this.worker = new Thread(new AsyncRunnable(), "MQ-AsyncTraceDispatcher-Thread-" + dispatcherId);
         this.worker.setDaemon(true);
         this.worker.start();
@@ -255,6 +262,7 @@ public class AsyncTraceDispatcher implements TraceDispatcher {
                 }
                 if (contexts.size() > 0) {
                     AsyncAppenderRequest request = new AsyncAppenderRequest(contexts);
+                    // 刷新topic信息
                     traceExecutor.submit(request);
                 } else if (AsyncTraceDispatcher.this.stopped) {
                     this.stopped = true;
@@ -310,6 +318,7 @@ public class AsyncTraceDispatcher implements TraceDispatcher {
                     dataTopic = key[0];
                     regionId = key[1];
                 }
+                // 刷新topic信息
                 flushData(entry.getValue(), dataTopic, regionId);
             }
         }

@@ -571,7 +571,7 @@ public class CommitLog {
                 || tranType == MessageSysFlag.TRANSACTION_COMMIT_TYPE) {
             // 非事务消息
 
-            // 分享问题1.3 延时消息投递到一个中间队列中，然后由定时器重新投递到对应队列中 ScheduleMessageService.DeliverDelayedMessageTimerTask
+            // 延时消息投递到一个中间队列中，然后由定时器重新投递到对应队列中 ScheduleMessageService.DeliverDelayedMessageTimerTask
             if (msg.getDelayTimeLevel() > 0) {
                 if (msg.getDelayTimeLevel() > this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel()) {
                     msg.setDelayTimeLevel(this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel());

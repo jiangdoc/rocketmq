@@ -85,7 +85,10 @@ public abstract class NettyRemotingAbstract {
      *      - BrokerController#initialize()
      *          - BrokerController#registerProcessor()
      * get:
+     *      NettyRemotingAbstract#processRequestCommand()
      *
+     * 数据结构：
+     * <请求编码，<SendMessageProcessor：处理器,线程池>>
      */
     protected final HashMap<Integer/* request code */, Pair<NettyRequestProcessor, ExecutorService>> processorTable =
         new HashMap<Integer, Pair<NettyRequestProcessor, ExecutorService>>(64);
@@ -231,6 +234,7 @@ public abstract class NettyRemotingAbstract {
                             }
                         };
                         if (pair.getObject1() instanceof AsyncNettyRequestProcessor) {
+                            // 异步处理请求
                             AsyncNettyRequestProcessor processor = (AsyncNettyRequestProcessor)pair.getObject1();
                             processor.asyncProcessRequest(ctx, cmd, callback);
                         } else {
@@ -262,6 +266,10 @@ public abstract class NettyRemotingAbstract {
             }
 
             try {
+                /**
+                 * 1. 提交任务到线程池
+                 *  会执行上面的：Runnable中的方法
+                 */
                 final RequestTask requestTask = new RequestTask(run, ctx.channel(), cmd);
                 pair.getObject2().submit(requestTask);
             } catch (RejectedExecutionException e) {

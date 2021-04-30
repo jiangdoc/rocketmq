@@ -282,6 +282,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         // 获取topic 对应的配置
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().selectTopicConfig(requestHeader.getTopic());
 
+        // 如果 队列Id<0 随机选一个
         if (queueIdInt < 0) {
             queueIdInt = randomQueueId(topicConfig.getWriteQueueNums());
         }

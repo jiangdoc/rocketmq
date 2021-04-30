@@ -240,9 +240,7 @@ public class BrokerController {
 
         if (result) {
             try {
-                this.messageStore =
-                    new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener,
-                        this.brokerConfig);
+                this.messageStore = new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener, this.brokerConfig);
                 if (messageStoreConfig.isEnableDLegerCommitLog()) {
                     DLedgerRoleChangeHandler roleChangeHandler = new DLedgerRoleChangeHandler(this, (DefaultMessageStore) messageStore);
                     ((DLedgerCommitLog)((DefaultMessageStore) messageStore).getCommitLog()).getdLedgerServer().getdLedgerLeaderElector().addRoleChangeHandler(roleChangeHandler);
@@ -260,11 +258,15 @@ public class BrokerController {
 
         result = result && this.messageStore.load();
 
+        /**
+         * 创建很多消息处理线程池
+         */
         if (result) {
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
             fastConfig.setListenPort(nettyServerConfig.getListenPort() - 2);
             this.fastRemotingServer = new NettyRemotingServer(fastConfig, this.clientHousekeepingService);
+            // 1.发消息线程池
             this.sendMessageExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getSendMessageThreadPoolNums(),
                 this.brokerConfig.getSendMessageThreadPoolNums(),
@@ -273,6 +275,7 @@ public class BrokerController {
                 this.sendThreadPoolQueue,
                 new ThreadFactoryImpl("SendMessageThread_"));
 
+            // 拉消息线程池
             this.pullMessageExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getPullMessageThreadPoolNums(),
                 this.brokerConfig.getPullMessageThreadPoolNums(),
@@ -329,9 +332,14 @@ public class BrokerController {
                 Executors.newFixedThreadPool(this.brokerConfig.getConsumerManageThreadPoolNums(), new ThreadFactoryImpl(
                     "ConsumerManageThread_"));
 
-            // 重要，这里会消息的处理器
+            /**
+             * 这里会注册消息的处理器
+             */
             this.registerProcessor();
 
+            /**
+             * 设置很多定时任务
+             */
             final long initialDelay = UtilAll.computeNextMorningTimeMillis() - System.currentTimeMillis();
             final long period = 1000 * 60 * 60 * 24;
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
@@ -851,6 +859,8 @@ public class BrokerController {
 
     /**
      * 这里会启动很多的服务
+     * 1. RemotingServer是用来接收网络请求并进行处理的核心类
+     * 2. 向NameSrv注册自己，并
      * @throws Exception
      */
     public void start() throws Exception {
@@ -863,8 +873,11 @@ public class BrokerController {
         }
 
         /**
-         * 重要
-         * RemotingServer是用来接收网络请求并进行处理的核心类.
+         * RemotingServer：注册Netty服务，并创建NettyServerHandler来接收网络请求并进行处理
+         * 会执行RemotingService.start()
+         * 1. 创建一个消息处理器：NettyServerHandler
+         * 2. 创建并启动一个NettyServer，接收并处理消息
+         *
          */
         if (this.remotingServer != null) {
             this.remotingServer.start();
@@ -901,6 +914,10 @@ public class BrokerController {
             this.registerBrokerAll(true, false, true);
         }
 
+        /**
+         * 启动一个定时任务去定时向注册自己
+         * 初始延迟10秒，间隔30秒注册一次
+         */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
