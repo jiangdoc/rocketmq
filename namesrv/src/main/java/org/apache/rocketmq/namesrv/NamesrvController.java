@@ -42,19 +42,37 @@ import org.apache.rocketmq.srvutil.FileWatchService;
 public class NamesrvController {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
+    /**
+     * NameServer配置属性：包括rocketmqHome（RocketMQ home目录），kvConfigPath（KV配置文件路径），configStorePath（Store配置文件路径）等
+     */
     private final NamesrvConfig namesrvConfig;
 
     private final NettyServerConfig nettyServerConfig;
 
-    private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl(
-        "NSScheduledThread"));
+    /**
+     *  NamesrvController 定时任务执行线程池，包含两个任务
+     */
+    private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("NSScheduledThread"));
+
+    /**
+     * KV配置属性管理器，主要管理NameServer的配置
+     */
     private final KVConfigManager kvConfigManager;
+    /**
+     * NameServer数据的载体，记录Broker,Topic等信息
+     */
     private final RouteInfoManager routeInfoManager;
 
+    /**
+     * Netty Server
+     */
     private RemotingServer remotingServer;
 
     private BrokerHousekeepingService brokerHousekeepingService;
 
+    /**
+     * 执行Netty Server的线程池
+     */
     private ExecutorService remotingExecutor;
 
     private Configuration configuration;
@@ -73,6 +91,15 @@ public class NamesrvController {
         this.configuration.setStorePathFromConfig(this.namesrvConfig, "configStorePath");
     }
 
+    /**
+     * 1.通过KVConfigManager，从/${user.home}/namesrv/kvConfig.json中加载NameServer的配置信息，KVConfigManager将配置信息存储在configTable中；
+     * 2.创建并初始化NettyRemotingServer，remotingServer是NameServer用于对外提供连接服务的；
+     * 3.创建用于执行NettyRemotingServer的线程池;
+     * 4.注册NameServer服务接受请求的处理类，默认采用DefaultRequestProcessor，所有的请求均由该处理类的processRequest方法来处理；
+     * 5.每隔10秒，通过RouteInfoManager扫描brokerLiveTable。判断每一个Broker最近两分钟是否更新过。如果没有更新则把该Broker的Channel关闭，并清除相关数据。
+     * 6.每隔10分钟，通过KVConfigManager，打印configTable的配置信息；
+     * @return
+     */
     public boolean initialize() {
 
         this.kvConfigManager.load();
@@ -82,12 +109,14 @@ public class NamesrvController {
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
+        // 注册接收请求的处理类
         this.registerProcessor();
 
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
             public void run() {
+                // 每隔10秒，通过RouteInfoManager扫描brokerLiveTable。判断每一个Broker最近两分钟是否更新过。如果没有更新则把该Broker的Channel关闭，并清除相关数据。
                 NamesrvController.this.routeInfoManager.scanNotActiveBroker();
             }
         }, 5, 10, TimeUnit.SECONDS);
@@ -141,6 +170,9 @@ public class NamesrvController {
         return true;
     }
 
+    /**
+     * 注册接收请求的处理类
+     */
     private void registerProcessor() {
         if (namesrvConfig.isClusterTest()) {
 
@@ -152,6 +184,11 @@ public class NamesrvController {
         }
     }
 
+    /**
+     * 1. 启动NettyServer
+     * 2. 启动FileWatchService
+     * @throws Exception
+     */
     public void start() throws Exception {
         this.remotingServer.start();
 
@@ -161,8 +198,11 @@ public class NamesrvController {
     }
 
     public void shutdown() {
+        // 关闭Netty server
         this.remotingServer.shutdown();
+        // 关闭处理Netty Server的线程池
         this.remotingExecutor.shutdown();
+        // 关闭定时任务线程池
         this.scheduledExecutorService.shutdown();
 
         if (this.fileWatchService != null) {

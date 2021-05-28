@@ -58,6 +58,9 @@ import org.apache.rocketmq.remoting.netty.AsyncNettyRequestProcessor;
 import org.apache.rocketmq.remoting.netty.NettyRequestProcessor;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+/**
+ * NameServer服务接受请求的处理类，默认采用DefaultRequestProcessor，所有的请求均由该处理类的processRequest方法来处理
+ */
 public class DefaultRequestProcessor extends AsyncNettyRequestProcessor implements NettyRequestProcessor {
     private static InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
@@ -67,10 +70,15 @@ public class DefaultRequestProcessor extends AsyncNettyRequestProcessor implemen
         this.namesrvController = namesrvController;
     }
 
+    /**
+     * 处理所有NameServer的请求
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     */
     @Override
-    public RemotingCommand processRequest(ChannelHandlerContext ctx,
-        RemotingCommand request) throws RemotingCommandException {
-
+    public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws RemotingCommandException {
         if (ctx != null) {
             log.debug("receive request, {} {} {}",
                 request.getCode(),
@@ -80,46 +88,47 @@ public class DefaultRequestProcessor extends AsyncNettyRequestProcessor implemen
 
 
         switch (request.getCode()) {
+            // 向Namesrv追加KV配置
             case RequestCode.PUT_KV_CONFIG:
                 return this.putKVConfig(ctx, request);
-            case RequestCode.GET_KV_CONFIG:
+            case RequestCode.GET_KV_CONFIG:// 从Namesrv获取KV配置
                 return this.getKVConfig(ctx, request);
             case RequestCode.DELETE_KV_CONFIG:
                 return this.deleteKVConfig(ctx, request);
             case RequestCode.QUERY_DATA_VERSION:
                 return queryBrokerTopicConfig(ctx, request);
-            case RequestCode.REGISTER_BROKER:
+            case RequestCode.REGISTER_BROKER: // 注册一个Broker，数据都是持久化的，如果存在则覆盖配置
                 Version brokerVersion = MQVersion.value2Version(request.getVersion());
                 if (brokerVersion.ordinal() >= MQVersion.Version.V3_0_11.ordinal()) {
                     return this.registerBrokerWithFilterServer(ctx, request);
                 } else {
                     return this.registerBroker(ctx, request);
                 }
-            case RequestCode.UNREGISTER_BROKER:
+            case RequestCode.UNREGISTER_BROKER: //卸载一个Broker，数据都是持久化的
                 return this.unregisterBroker(ctx, request);
-            case RequestCode.GET_ROUTEINTO_BY_TOPIC:
+            case RequestCode.GET_ROUTEINTO_BY_TOPIC: //根据Topic获取Broker Name、Topic配置信息
                 return this.getRouteInfoByTopic(ctx, request);
-            case RequestCode.GET_BROKER_CLUSTER_INFO:
+            case RequestCode.GET_BROKER_CLUSTER_INFO: //获取注册到NameServer的所有Broker集群信息
                 return this.getBrokerClusterInfo(ctx, request);
-            case RequestCode.WIPE_WRITE_PERM_OF_BROKER:
+            case RequestCode.WIPE_WRITE_PERM_OF_BROKER: //去掉BrokerName的写权限
                 return this.wipeWritePermOfBroker(ctx, request);
-            case RequestCode.GET_ALL_TOPIC_LIST_FROM_NAMESERVER:
+            case RequestCode.GET_ALL_TOPIC_LIST_FROM_NAMESERVER: //从NameServer获取完整Topic列表
                 return getAllTopicListFromNameserver(ctx, request);
-            case RequestCode.DELETE_TOPIC_IN_NAMESRV:
+            case RequestCode.DELETE_TOPIC_IN_NAMESRV: //从Namesrv删除Topic配置
                 return deleteTopicInNamesrv(ctx, request);
-            case RequestCode.GET_KVLIST_BY_NAMESPACE:
+            case RequestCode.GET_KVLIST_BY_NAMESPACE: // 通过NameSpace获取所有的KV List
                 return this.getKVListByNamespace(ctx, request);
-            case RequestCode.GET_TOPICS_BY_CLUSTER:
+            case RequestCode.GET_TOPICS_BY_CLUSTER: //获取指定集群下的所有Topic
                 return this.getTopicsByCluster(ctx, request);
-            case RequestCode.GET_SYSTEM_TOPIC_LIST_FROM_NS:
+            case RequestCode.GET_SYSTEM_TOPIC_LIST_FROM_NS: //获取所有系统内置Topic列表
                 return this.getSystemTopicListFromNs(ctx, request);
-            case RequestCode.GET_UNIT_TOPIC_LIST:
+            case RequestCode.GET_UNIT_TOPIC_LIST: // 单元化相关Topic
                 return this.getUnitTopicList(ctx, request);
-            case RequestCode.GET_HAS_UNIT_SUB_TOPIC_LIST:
+            case RequestCode.GET_HAS_UNIT_SUB_TOPIC_LIST: // 获取含有单元化订阅组的Topic列表
                 return this.getHasUnitSubTopicList(ctx, request);
             case RequestCode.GET_HAS_UNIT_SUB_UNUNIT_TOPIC_LIST:
                 return this.getHasUnitSubUnUnitTopicList(ctx, request);
-            case RequestCode.UPDATE_NAMESRV_CONFIG:
+            case RequestCode.UPDATE_NAMESRV_CONFIG: // 更新NameServer配置
                 return this.updateConfig(ctx, request);
             case RequestCode.GET_NAMESRV_CONFIG:
                 return this.getConfig(ctx, request);

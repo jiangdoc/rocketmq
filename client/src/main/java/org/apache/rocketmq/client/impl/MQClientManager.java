@@ -50,9 +50,7 @@ public class MQClientManager {
         MQClientInstance instance = this.factoryTable.get(clientId);
         // 放入 local cache
         if (null == instance) {
-            instance =
-                new MQClientInstance(clientConfig.cloneClientConfig(),
-                    this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);
+            instance = new MQClientInstance(clientConfig.cloneClientConfig(), this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);
             MQClientInstance prev = this.factoryTable.putIfAbsent(clientId, instance);
             if (prev != null) {
                 instance = prev;

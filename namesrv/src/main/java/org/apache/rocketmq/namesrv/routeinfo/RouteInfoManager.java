@@ -45,14 +45,38 @@ import org.apache.rocketmq.common.protocol.route.TopicRouteData;
 import org.apache.rocketmq.common.sysflag.TopicSysFlag;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
 
+/**
+ * RouteInfoManager作为NameServer数据的载体，记录Broker、Topic、QueueData等信息
+ *      Broker在启动时会将Broker信息、Topic信息、QueueData信息注册到所有的NameServer上，并和所有NameServer节点保持长连接，之后也会定时注册信息
+ *      Producer、Consumer也会和其中一个NameServer节点保持长连接，定时从NameServer中获取Topic路由信息
+ */
 public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
+    /**
+     *  NameServer与Broker空闲时长，默认2分钟，在2分钟内Nameserver没有收到Broker的心跳包，则关闭该连接。单位（毫秒）
+     */
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    /**
+     * topic 对应的队列在哪些broker机器上
+     */
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
+    /**
+     * broker 的详细信息
+     */
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
+    /**
+     * 每个集群包含的broker
+     */
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+    /**
+     * broker地址-broker存活信息映射表，当前存活的Broker,该信息不是实时的
+     */
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
+    /**
+     * broker地址-过滤服务器映射表
+     * Filter Server是消息的过滤服务器，一个Broker可以对应多个Filter Server
+     */
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
     public RouteInfoManager() {

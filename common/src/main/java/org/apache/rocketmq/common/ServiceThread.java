@@ -48,6 +48,11 @@ public abstract class ServiceThread implements Runnable {
             return;
         }
         stopped = false;
+        /**
+         * this
+         * @see org.apache.rocketmq.srvutil.FileWatchService#run()
+         * 设置为守护线程
+         */
         this.thread = new Thread(this, getServiceName());
         this.thread.setDaemon(isDaemon);
         // 线程开启

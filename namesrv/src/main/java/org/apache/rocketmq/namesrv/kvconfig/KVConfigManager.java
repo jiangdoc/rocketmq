@@ -28,19 +28,32 @@ import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.common.protocol.body.KVTable;
 import org.apache.rocketmq.namesrv.NamesrvController;
+
+/**
+ * 主要负责读取或变更NameServer的配置属性，加载NamesrvConfig中配置的配置文件到内存
+ */
 public class KVConfigManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
     private final NamesrvController namesrvController;
 
+    /**
+     * 读写锁，尽最大程度提高线程的并发度，因为使用非线程安全的容器。
+     */
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
-    private final HashMap<String/* Namespace */, HashMap<String/* Key */, String/* Value */>> configTable =
-        new HashMap<String, HashMap<String, String>>();
+
+    /**
+     * 使用轻量级HashMap，存储配置数据
+     */
+    private final HashMap<String/* Namespace */, HashMap<String/* Key */, String/* Value */>> configTable = new HashMap<String, HashMap<String, String>>();
 
     public KVConfigManager(NamesrvController namesrvController) {
         this.namesrvController = namesrvController;
     }
 
+    /**
+     * 将配置项文件加载到内存
+     */
     public void load() {
         String content = null;
         try {
@@ -87,6 +100,9 @@ public class KVConfigManager {
         this.persist();
     }
 
+    /**
+     * 配置项持久化到文件
+     */
     public void persist() {
         try {
             this.lock.readLock().lockInterruptibly();
