@@ -55,7 +55,14 @@ public class BrokerStartup {
     public static InternalLogger log;
 
     public static void main(String[] args) {
-        start(createBrokerController(args));
+        /**
+         * 1. 创建BrokerController
+         * 2. 从磁盘配置文件中加载一些配置信息：比如Topic信息，consumer的offset等等
+         * 3. 创建NettyRemotingServer，用于处理请求
+         * 4. 间隔30秒向所有NameSrv注册自己
+         */
+        BrokerController brokerController = createBrokerController(args);
+        start(brokerController);
     }
 
     public static BrokerController start(BrokerController controller) {

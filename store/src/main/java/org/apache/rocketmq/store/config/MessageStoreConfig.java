@@ -72,10 +72,16 @@ public class MessageStoreConfig {
     private int destroyMapedFileIntervalForcibly = 1000 * 120;
     private int redeleteHangedFileInterval = 1000 * 120;
     // When to delete,default is at 4 am
+    /**
+     * 过期消息删除时间 默认凌晨四点
+     */
     @ImportantField
     private String deleteWhen = "04";
     private int diskMaxUsedSpaceRatio = 75;
     // The number of hours to keep a log file before deleting it (in hours)
+    /**
+     * 消息保存时长，单位小时
+     */
     @ImportantField
     private int fileReservedTime = 72;
     // Flow control for ConsumeQueue

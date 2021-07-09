@@ -37,3 +37,24 @@
 - RouteInfoManager作为NameServer数据的载体，记录Broker、Topic、QueueData等信息
     - Broker在启动时会将Broker信息、Topic信息、QueueData信息注册到所有的NameServer上，并和所有NameServer节点保持长连接，之后也会定时注册信息
     - Producer、Consumer也会和其中一个NameServer节点保持长连接，定时从NameServer中获取Topic路由信息
+    
+    
+    
+# Broker
+## 接收消息
+org.apache.rocketmq.remoting.netty.NettyRemotingAbstract.processMessageReceived
+
+## 处理写消息
+**CommitLog**:收到消息触发CommitLog的写
+org.apache.rocketmq.broker.processor.SendMessageProcessor.asyncSendMessage
+org.apache.rocketmq.store.CommitLog.asyncPutMessage
+
+ConsumerQueue和IndexFile的写触发，是读取CommitLog中的消息
+org.apache.rocketmq.store.DefaultMessageStore.ReputMessageService.doReput
+**ConsumerQueue**:
+CommitLogDispatcherBuildConsumeQueue#dispatch(org.apache.rocketmq.store.DispatchRequest)
+**IndexFile**:
+CommitLogDispatcherBuildIndex#dispatch(org.apache.rocketmq.store.DispatchRequest)
+
+## 处理读消息
+org.apache.rocketmq.broker.processor.PullMessageProcessor.processRequest

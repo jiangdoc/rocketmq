@@ -35,15 +35,30 @@ public class MappedFileQueue {
 
     private static final int DELETE_FILES_BATCH_MAX = 10;
 
+    /**
+     * 文件存储目录
+     */
     private final String storePath;
 
+    /**
+     * 单个文件大小
+     */
     private final int mappedFileSize;
 
+    /**
+     * 文件集合
+     */
     private final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<MappedFile>();
 
     private final AllocateMappedFileService allocateMappedFileService;
 
+    /**
+     * 当前刷盘指针，在这之前的数据都已经刷盘
+     */
     private long flushedWhere = 0;
+    /**
+     * 当前提交的指针，内存ByteBuffer当前的写指针，>= flushedWhere
+     */
     private long committedWhere = 0;
 
     private volatile long storeTimestamp = 0;

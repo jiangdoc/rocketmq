@@ -115,21 +115,35 @@ public class BrokerController {
     private final NettyServerConfig nettyServerConfig;
     private final NettyClientConfig nettyClientConfig;
     private final MessageStoreConfig messageStoreConfig;
+    // 消费端的offset管理
     private final ConsumerOffsetManager consumerOffsetManager;
+    // 消费者管理，基于特定的消费id
     private final ConsumerManager consumerManager;
     private final ConsumerFilterManager consumerFilterManager;
+
+    // 生产者管理
     private final ProducerManager producerManager;
+    //监听客户端的网络
     private final ClientHousekeepingService clientHousekeepingService;
+    //pull消息的处理
     private final PullMessageProcessor pullMessageProcessor;
+    // pull消息的服务
     private final PullRequestHoldService pullRequestHoldService;
+
+    //消息到达后执行的监听处理
     private final MessageArrivingListener messageArrivingListener;
+    //broker作为客户端进行心跳鉴定对访问者的操作
     private final Broker2Client broker2Client;
+    //订阅消息的管理
     private final SubscriptionGroupManager subscriptionGroupManager;
+    //消费消息的id监听
     private final ConsumerIdsChangeListener consumerIdsChangeListener;
     private final RebalanceLockManager rebalanceLockManager = new RebalanceLockManager();
+    //broker的接口服务管理，主要和namesrv交互
     private final BrokerOuterAPI brokerOuterAPI;
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl(
         "BrokerControllerScheduledThread"));
+    //主从同步管理，主要对slave有效，同步元数据
     private final SlaveSynchronize slaveSynchronize;
     private final BlockingQueue<Runnable> sendThreadPoolQueue;
     private final BlockingQueue<Runnable> pullThreadPoolQueue;
@@ -139,13 +153,16 @@ public class BrokerController {
     private final BlockingQueue<Runnable> heartbeatThreadPoolQueue;
     private final BlockingQueue<Runnable> consumerManagerThreadPoolQueue;
     private final BlockingQueue<Runnable> endTransactionThreadPoolQueue;
+    //过滤管理
     private final FilterServerManager filterServerManager;
+    //当前broker的状态管理
     private final BrokerStatsManager brokerStatsManager;
     private final List<SendMessageHook> sendMessageHookList = new ArrayList<SendMessageHook>();
     private final List<ConsumeMessageHook> consumeMessageHookList = new ArrayList<ConsumeMessageHook>();
     private MessageStore messageStore;
     private RemotingServer remotingServer;
     private RemotingServer fastRemotingServer;
+    //topic的管理
     private TopicConfigManager topicConfigManager;
     private ExecutorService sendMessageExecutor;
     private ExecutorService pullMessageExecutor;
@@ -195,6 +212,7 @@ public class BrokerController {
 
         this.slaveSynchronize = new SlaveSynchronize(this);
 
+        //内部操作队列
         this.sendThreadPoolQueue = new LinkedBlockingQueue<Runnable>(this.brokerConfig.getSendThreadPoolQueueCapacity());
         this.pullThreadPoolQueue = new LinkedBlockingQueue<Runnable>(this.brokerConfig.getPullThreadPoolQueueCapacity());
         this.replyThreadPoolQueue = new LinkedBlockingQueue<Runnable>(this.brokerConfig.getReplyThreadPoolQueueCapacity());
@@ -204,9 +222,11 @@ public class BrokerController {
         this.heartbeatThreadPoolQueue = new LinkedBlockingQueue<Runnable>(this.brokerConfig.getHeartbeatThreadPoolQueueCapacity());
         this.endTransactionThreadPoolQueue = new LinkedBlockingQueue<Runnable>(this.brokerConfig.getEndTransactionPoolQueueCapacity());
 
+        //当前broker的状态管理
         this.brokerStatsManager = new BrokerStatsManager(this.brokerConfig.getBrokerClusterName());
         this.setStoreHost(new InetSocketAddress(this.getBrokerConfig().getBrokerIP1(), this.getNettyServerConfig().getListenPort()));
 
+        //快速失败策略
         this.brokerFastFailure = new BrokerFastFailure(this);
         this.configuration = new Configuration(
             log,
@@ -215,36 +235,41 @@ public class BrokerController {
         );
     }
 
-    public BrokerConfig getBrokerConfig() {
-        return brokerConfig;
-    }
-
-    public NettyServerConfig getNettyServerConfig() {
-        return nettyServerConfig;
-    }
-
-    public BlockingQueue<Runnable> getPullThreadPoolQueue() {
-        return pullThreadPoolQueue;
-    }
-
-    public BlockingQueue<Runnable> getQueryThreadPoolQueue() {
-        return queryThreadPoolQueue;
-    }
 
     public boolean initialize() throws CloneNotSupportedException {
+        /**
+         * 从 磁盘(/config/topics.json) 中加载当前Broker所有的topic信息到 TopicConfigManager 的 topicConfigTable
+         * @see TopicConfigManager#topicConfigTable
+         */
         boolean result = this.topicConfigManager.load();
 
+        /**
+         * 从 磁盘(/config/consumerOffset.json) 中加载所有Consumer的offset 信息到 ConsumerOffsetManager 的 offsetTable
+         * @see org.apache.rocketmq.broker.offset.ConsumerOffsetManager#offsetTable
+         */
         result = result && this.consumerOffsetManager.load();
+
+        /**
+         * 从 磁盘(/config/subscriptionGroup.json) 中加载当前Broker所有订阅者，并解析成 SubscriptionGroupManager 的 subscriptionGroupTable
+         * @see SubscriptionGroupManager#subscriptionGroupTable
+         */
         result = result && this.subscriptionGroupManager.load();
+
+        /**
+         * 从 磁盘(/config/consumerFilter.json) 中加载Comsumer的过滤条件，并解析成 ConsumerFilterManager 的 filterDataByTopic
+         * @see ConsumerFilterManager#filterDataByTopic
+         */
         result = result && this.consumerFilterManager.load();
 
         if (result) {
             try {
                 this.messageStore = new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener, this.brokerConfig);
+                //是否打开了主从自动切换（delger）
                 if (messageStoreConfig.isEnableDLegerCommitLog()) {
                     DLedgerRoleChangeHandler roleChangeHandler = new DLedgerRoleChangeHandler(this, (DefaultMessageStore) messageStore);
                     ((DLedgerCommitLog)((DefaultMessageStore) messageStore).getCommitLog()).getdLedgerServer().getdLedgerLeaderElector().addRoleChangeHandler(roleChangeHandler);
                 }
+                //加载昨天和今天消息获取和发送的总数
                 this.brokerStats = new BrokerStats((DefaultMessageStore) this.messageStore);
                 //load plugin
                 MessageStorePluginContext context = new MessageStorePluginContext(messageStoreConfig, brokerStatsManager, messageArrivingListener, brokerConfig);
@@ -256,6 +281,9 @@ public class BrokerController {
             }
         }
 
+        /**
+         * 加载 commitlog
+         */
         result = result && this.messageStore.load();
 
         /**
@@ -353,6 +381,9 @@ public class BrokerController {
                 }
             }, initialDelay, period, TimeUnit.MILLISECONDS);
 
+            /**
+             * 每5s更新consumer offset的值
+             */
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -375,6 +406,9 @@ public class BrokerController {
                 }
             }, 1000 * 10, 1000 * 10, TimeUnit.MILLISECONDS);
 
+            /**
+             * 3分钟检查一次，消费者落后一定数量后 消费组暂停消费
+             */
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -488,8 +522,12 @@ public class BrokerController {
                     log.warn("FileWatchService created error, can't load the certificate dynamically");
                 }
             }
+
+            //初始化事务消息的处理Service 和消息状态回查的Service
             initialTransaction();
+            //初始化访问控制列表
             initialAcl();
+            //初始化钩子
             initialRpcHooks();
         }
         return result;
@@ -633,14 +671,6 @@ public class BrokerController {
         this.fastRemotingServer.registerDefaultProcessor(adminProcessor, this.adminBrokerExecutor);
     }
 
-    public BrokerStats getBrokerStats() {
-        return brokerStats;
-    }
-
-    public void setBrokerStats(BrokerStats brokerStats) {
-        this.brokerStats = brokerStats;
-    }
-
     public void protectBroker() {
         if (this.brokerConfig.isDisableConsumeIfConsumerReadSlowly()) {
             final Iterator<Map.Entry<String, MomentStatsItem>> it = this.brokerStatsManager.getMomentStatsItemSetFallSize().getStatsItemTable().entrySet().iterator();
@@ -695,59 +725,11 @@ public class BrokerController {
         LOG_WATER_MARK.info("[WATERMARK] Transaction Queue Size: {} SlowTimeMills: {}", this.endTransactionThreadPoolQueue.size(), headSlowTimeMills4EndTransactionThreadPoolQueue());
     }
 
-    public MessageStore getMessageStore() {
-        return messageStore;
-    }
-
-    public void setMessageStore(MessageStore messageStore) {
-        this.messageStore = messageStore;
-    }
-
     private void printMasterAndSlaveDiff() {
         long diff = this.messageStore.slaveFallBehindMuch();
 
         // XXX: warn and notify me
         log.info("Slave fall behind master: {} bytes", diff);
-    }
-
-    public Broker2Client getBroker2Client() {
-        return broker2Client;
-    }
-
-    public ConsumerManager getConsumerManager() {
-        return consumerManager;
-    }
-
-    public ConsumerFilterManager getConsumerFilterManager() {
-        return consumerFilterManager;
-    }
-
-    public ConsumerOffsetManager getConsumerOffsetManager() {
-        return consumerOffsetManager;
-    }
-
-    public MessageStoreConfig getMessageStoreConfig() {
-        return messageStoreConfig;
-    }
-
-    public ProducerManager getProducerManager() {
-        return producerManager;
-    }
-
-    public void setFastRemotingServer(RemotingServer fastRemotingServer) {
-        this.fastRemotingServer = fastRemotingServer;
-    }
-
-    public PullMessageProcessor getPullMessageProcessor() {
-        return pullMessageProcessor;
-    }
-
-    public PullRequestHoldService getPullRequestHoldService() {
-        return pullRequestHoldService;
-    }
-
-    public SubscriptionGroupManager getSubscriptionGroupManager() {
-        return subscriptionGroupManager;
     }
 
     public void shutdown() {
@@ -865,8 +847,8 @@ public class BrokerController {
      */
     public void start() throws Exception {
         /**
-         * messageStore是保存消息的接口,默认是org.apache.rocketmq.store.DefaultMessageStore实现。
-         *
+         * messageStore是保存消息的接口,默认是DefaultMessageStore实现。
+         * @see DefaultMessageStore#start()
          */
         if (this.messageStore != null) {
             this.messageStore.start();
@@ -915,7 +897,7 @@ public class BrokerController {
         }
 
         /**
-         * 启动一个定时任务去定时向注册自己
+         * 启动一个定时任务去定时向所有NameSrv注册自己
          * 初始延迟10秒，间隔30秒注册一次
          */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
@@ -983,8 +965,7 @@ public class BrokerController {
         }
     }
 
-    private void doRegisterBrokerAll(boolean checkOrderConfig, boolean oneway,
-        TopicConfigSerializeWrapper topicConfigWrapper) {
+    private void doRegisterBrokerAll(boolean checkOrderConfig, boolean oneway, TopicConfigSerializeWrapper topicConfigWrapper) {
         List<RegisterBrokerResult> registerBrokerResultList = this.brokerOuterAPI.registerBrokerAll(
             this.brokerConfig.getBrokerClusterName(),
             this.getBrokerAddr(),
@@ -1031,6 +1012,86 @@ public class BrokerController {
         return needRegister;
     }
 
+
+    public void registerSendMessageHook(final SendMessageHook hook) {
+        this.sendMessageHookList.add(hook);
+        log.info("register SendMessageHook Hook, {}", hook.hookName());
+    }
+
+    public void registerConsumeMessageHook(final ConsumeMessageHook hook) {
+        this.consumeMessageHookList.add(hook);
+        log.info("register ConsumeMessageHook Hook, {}", hook.hookName());
+    }
+
+    public void registerServerRPCHook(RPCHook rpcHook) {
+        getRemotingServer().registerRPCHook(rpcHook);
+        this.fastRemotingServer.registerRPCHook(rpcHook);
+    }
+
+
+
+    // -----------------getter and setter ------------
+
+    public BrokerStats getBrokerStats() {
+        return brokerStats;
+    }
+
+    public void setBrokerStats(BrokerStats brokerStats) {
+        this.brokerStats = brokerStats;
+    }
+
+    public MessageStore getMessageStore() {
+        return messageStore;
+    }
+
+    public void setMessageStore(MessageStore messageStore) {
+        this.messageStore = messageStore;
+    }
+
+    public Broker2Client getBroker2Client() {
+        return broker2Client;
+    }
+
+    public ConsumerManager getConsumerManager() {
+        return consumerManager;
+    }
+
+    public ConsumerFilterManager getConsumerFilterManager() {
+        return consumerFilterManager;
+    }
+
+    public ConsumerOffsetManager getConsumerOffsetManager() {
+        return consumerOffsetManager;
+    }
+
+    public MessageStoreConfig getMessageStoreConfig() {
+        return messageStoreConfig;
+    }
+
+    public ProducerManager getProducerManager() {
+        return producerManager;
+    }
+
+    public void setFastRemotingServer(RemotingServer fastRemotingServer) {
+        this.fastRemotingServer = fastRemotingServer;
+    }
+
+    public PullMessageProcessor getPullMessageProcessor() {
+        return pullMessageProcessor;
+    }
+
+    public PullRequestHoldService getPullRequestHoldService() {
+        return pullRequestHoldService;
+    }
+
+    public SubscriptionGroupManager getSubscriptionGroupManager() {
+        return subscriptionGroupManager;
+    }
+
+    public List<ConsumeMessageHook> getConsumeMessageHookList() {
+        return consumeMessageHookList;
+    }
+
     public TopicConfigManager getTopicConfigManager() {
         return topicConfigManager;
     }
@@ -1075,23 +1136,20 @@ public class BrokerController {
         return sendMessageHookList;
     }
 
-    public void registerSendMessageHook(final SendMessageHook hook) {
-        this.sendMessageHookList.add(hook);
-        log.info("register SendMessageHook Hook, {}", hook.hookName());
+    public BrokerConfig getBrokerConfig() {
+        return brokerConfig;
     }
 
-    public List<ConsumeMessageHook> getConsumeMessageHookList() {
-        return consumeMessageHookList;
+    public NettyServerConfig getNettyServerConfig() {
+        return nettyServerConfig;
     }
 
-    public void registerConsumeMessageHook(final ConsumeMessageHook hook) {
-        this.consumeMessageHookList.add(hook);
-        log.info("register ConsumeMessageHook Hook, {}", hook.hookName());
+    public BlockingQueue<Runnable> getPullThreadPoolQueue() {
+        return pullThreadPoolQueue;
     }
 
-    public void registerServerRPCHook(RPCHook rpcHook) {
-        getRemotingServer().registerRPCHook(rpcHook);
-        this.fastRemotingServer.registerRPCHook(rpcHook);
+    public BlockingQueue<Runnable> getQueryThreadPoolQueue() {
+        return queryThreadPoolQueue;
     }
 
     public RemotingServer getRemotingServer() {

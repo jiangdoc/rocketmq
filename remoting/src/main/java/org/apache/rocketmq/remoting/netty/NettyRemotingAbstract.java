@@ -207,6 +207,50 @@ public abstract class NettyRemotingAbstract {
         final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessor : matched;
         final int opaque = cmd.getOpaque();
 
+        // 不用线程池，改成同步调用
+        if (cmd.getCode() == 310) {
+            try {
+                doBeforeRpcHooks(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd);
+                final RemotingResponseCallback callback = new RemotingResponseCallback() {
+                    @Override
+                    public void callback(RemotingCommand response) {
+                        doAfterRpcHooks(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd, response);
+                        if (!cmd.isOnewayRPC()) {
+                            if (response != null) {
+                                response.setOpaque(opaque);
+                                response.markResponseType();
+                                try {
+                                    ctx.writeAndFlush(response);
+                                } catch (Throwable e) {
+                                    log.error("process request over, but response failed", e);
+                                    log.error(cmd.toString());
+                                    log.error(response.toString());
+                                }
+                            } else {
+                            }
+                        }
+                    }
+                };
+                if (pair.getObject1() instanceof AsyncNettyRequestProcessor) {
+                    // 异步处理请求
+                    AsyncNettyRequestProcessor processor = (AsyncNettyRequestProcessor) pair.getObject1();
+                    processor.asyncProcessRequest(ctx, cmd, callback);
+                } else {
+                    NettyRequestProcessor processor = pair.getObject1();
+                    RemotingCommand response = processor.processRequest(ctx, cmd);
+                    doAfterRpcHooks(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd, response);
+                    callback.callback(response);
+                }
+            } catch (Throwable e) {
+                if (!cmd.isOnewayRPC()) {
+                    final RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_ERROR,
+                            RemotingHelper.exceptionSimpleDesc(e));
+                    response.setOpaque(opaque);
+                    ctx.writeAndFlush(response);
+                }
+            }
+        }
+
         if (pair != null) {
             Runnable run = new Runnable() {
                 @Override
